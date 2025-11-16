@@ -77,7 +77,7 @@ export default defineConfig({
       registerType: 'autoUpdate',
       injectRegister: false,
       workbox: {
-        navigateFallback: '/index.html',
+        navigateFallback: '/offline.html',
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2}'],
         skipWaiting: true,
         clientsClaim: true,
