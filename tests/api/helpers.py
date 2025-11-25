@@ -17,11 +17,18 @@ def auth_headers(access_token: str) -> dict[str, str]:
     return {"Authorization": f"Bearer {access_token}"}
 
 
+def strong_password(prefix: str) -> str:
+    """Generate a password that always satisfies password policy."""
+    suffix = unique_name("pwd").split("_")[-1]
+    return f"{prefix}#12{suffix}"
+
+
 def create_admin(
     access_token: str, *, username: str | None = None, password: str | None = None, is_sudo: bool = False
 ) -> dict:
     username = username or unique_name("admin")
-    password = password or f"TestAdmin#{uuid4().hex[:8]}"
+    # Ensure password always meets complexity rules (>=2 digits, 2 uppercase, 2 lowercase, special char)
+    password = password or strong_password("TestAdmincreate")
     response = client.post(
         "/api/admin",
         headers=auth_headers(access_token),

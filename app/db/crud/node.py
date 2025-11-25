@@ -71,7 +71,7 @@ async def get_nodes(
     limit: int | None = None,
     ids: list[int] | None = None,
     search: str | None = None,
-) -> list[Node]:
+) -> tuple[list[Node], int]:
     """
     Retrieves nodes based on optional status, enabled, id, and search filters.
 
@@ -86,7 +86,9 @@ async def get_nodes(
         search (str | None): Optional search term to match node names.
 
     Returns:
-        List[Node]: A list of Node objects matching the criteria.
+        tuple: A tuple containing:
+            - list[Node]: A list of Node objects matching the criteria.
+            - int: The total count of nodes matching the filters (before offset/limit).
     """
     query = select(Node)
 
@@ -111,6 +113,11 @@ async def get_nodes(
             like_expression = f"%{search_value}%"
             query = query.where(or_(Node.name.ilike(like_expression), Node.api_key.ilike(like_expression)))
 
+    # Get count before applying offset/limit
+    count_query = select(func.count()).select_from(query.subquery())
+    count = (await db.execute(count_query)).scalar_one()
+
+    # Apply pagination
     if offset:
         query = query.offset(offset)
     if limit:
@@ -120,7 +127,7 @@ async def get_nodes(
     for node in db_nodes:
         await load_node_attrs(node)
 
-    return db_nodes
+    return db_nodes, count
 
 
 async def get_limited_nodes(db: AsyncSession) -> list[Node]:
@@ -254,18 +261,23 @@ async def create_node(db: AsyncSession, node: NodeCreate) -> Node:
     return db_node
 
 
-async def remove_node(db: AsyncSession, db_node: Node) -> Node:
+async def remove_node(db: AsyncSession, db_node: Node) -> None:
     """
-    Removes a node from the database.
+    Removes a node and all related records quickly using bulk deletes.
 
     Args:
         db (AsyncSession): The database session.
-        dbnode (Node): The Node object to be removed.
-
-    Returns:
-        Node: The removed Node object.
+        db_node (Node): The Node object to be removed.
     """
-    await db.delete(db_node)
+    node_id = db_node.id
+
+    # Remove dependent rows explicitly to avoid ORM cascading overhead on large tables.
+    await db.execute(delete(NodeUserUsage).where(NodeUserUsage.node_id == node_id))
+    await db.execute(delete(NodeUsage).where(NodeUsage.node_id == node_id))
+    await db.execute(delete(NodeUsageResetLogs).where(NodeUsageResetLogs.node_id == node_id))
+    await db.execute(delete(NodeStat).where(NodeStat.node_id == node_id))
+    await db.execute(delete(Node).where(Node.id == node_id))
+
     await db.commit()
 
 

@@ -7,9 +7,9 @@ import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover
 import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigger, DropdownMenuSeparator, DropdownMenuLabel } from '@/components/ui/dropdown-menu'
 import useDirDetection from '@/hooks/use-dir-detection'
 import { cn } from '@/lib/utils'
-import { debounce } from 'es-toolkit'
+import { useDebouncedSearch } from '@/hooks/use-debounced-search'
 import { RefreshCw, SearchIcon, Filter, X, ArrowUpDown, User, Calendar, ChartPie, ChevronDown, Check, Clock } from 'lucide-react'
-import { useState, useRef, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { useTranslation } from 'react-i18next'
 import { useGetUsers, UserStatus } from '@/service/api'
 import { RefetchOptions } from '@tanstack/react-query'
@@ -86,24 +86,29 @@ interface FiltersProps {
 export const Filters = ({ filters, onFilterChange, refetch, autoRefetch, advanceSearchOnOpen, onClearAdvanceSearch, handleSort }: FiltersProps) => {
   const { t } = useTranslation()
   const dir = useDirDetection()
-  const [search, setSearch] = useState(filters.search || '')
   const [isRefreshing, setIsRefreshing] = useState(false)
   const [autoRefreshInterval, setAutoRefreshInterval] = useState<number>(() => getUsersAutoRefreshIntervalSeconds())
-  const { refetch: queryRefetch } = useGetUsers(filters)
-  const refetchUsers = useCallback(async (showLoading = false, isAutoRefresh = false) => {
-    if (showLoading) {
-      setIsRefreshing(true)
-    }
-    try {
-      // Use autoRefetch for auto refresh, otherwise use manual refetch
-      const refetchFn = isAutoRefresh ? (autoRefetch ?? queryRefetch) : (refetch ?? queryRefetch)
-      await refetchFn()
-    } finally {
+  const { refetch: queryRefetch, isFetching } = useGetUsers(filters)
+  const { search, debouncedSearch, setSearch } = useDebouncedSearch(filters.search || '', 300)
+  const prevDebouncedSearchRef = useRef<string | undefined>(filters.search || undefined)
+  
+  const refetchUsers = useCallback(
+    async (showLoading = false, isAutoRefresh = false) => {
       if (showLoading) {
-        setIsRefreshing(false)
+        setIsRefreshing(true)
       }
-    }
-  }, [refetch, autoRefetch, queryRefetch])
+      try {
+        // Use autoRefetch for auto refresh, otherwise use manual refetch
+        const refetchFn = isAutoRefresh ? (autoRefetch ?? queryRefetch) : (refetch ?? queryRefetch)
+        await refetchFn()
+      } finally {
+        if (showLoading) {
+          setIsRefreshing(false)
+        }
+      }
+    },
+    [refetch, autoRefetch, queryRefetch],
+  )
   useEffect(() => {
     const persistedValue = getUsersAutoRefreshIntervalSeconds()
     setAutoRefreshInterval(prev => (prev === persistedValue ? prev : persistedValue))
@@ -135,39 +140,27 @@ export const Filters = ({ filters, onFilterChange, refetch, autoRefetch, advance
         ? t('autoRefresh.shortSeconds', { count: autoRefreshInterval })
         : t('autoRefresh.shortMinutes', { count: Math.round(autoRefreshInterval / 60) })
   const currentAutoRefreshDescription = t(currentAutoRefreshOption.labelKey)
-  const onFilterChangeRef = useRef(onFilterChange)
 
-  // Keep the ref in sync with the prop
-  onFilterChangeRef.current = onFilterChange
-
-  // Create debounced function using es-toolkit, stored in ref to avoid recreation
-  const debouncedFilterChangeRef = useRef(
-    debounce((value: string) => {
-      onFilterChangeRef.current({
-        search: value,
+  // Update filters when debounced search changes
+  useEffect(() => {
+    // Only update if search actually changed to avoid resetting page on initial load
+    if (debouncedSearch !== prevDebouncedSearchRef.current) {
+      prevDebouncedSearchRef.current = debouncedSearch
+      onFilterChange({
+        search: debouncedSearch || '',
         offset: 0,
       })
-    }, 300),
-  )
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      debouncedFilterChangeRef.current.cancel()
     }
-  }, [])
+  }, [debouncedSearch, onFilterChange])
 
   // Handle input change
   const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const value = e.target.value
-    setSearch(value)
-    debouncedFilterChangeRef.current(value)
+    setSearch(e.target.value)
   }
 
   // Clear search field
   const clearSearch = () => {
     setSearch('')
-    debouncedFilterChangeRef.current.cancel()
     onFilterChange({
       search: '',
       offset: 0,
@@ -297,22 +290,20 @@ export const Filters = ({ filters, onFilterChange, refetch, autoRefetch, advance
           className={cn(
             'relative flex h-9 w-9 items-center justify-center border transition-all duration-200 md:h-10 md:w-10',
             dir === 'rtl' ? 'rounded-l-none border-l-0' : 'rounded-r-none',
-            isRefreshing && 'opacity-70',
+            (isRefreshing || isFetching) && 'opacity-70',
           )}
           aria-label={t('autoRefresh.refreshNow')}
           title={t('autoRefresh.refreshNow')}
-          disabled={isRefreshing}
+          disabled={isRefreshing || isFetching}
         >
-          <RefreshCw className={cn('h-4 w-4 transition-transform duration-200', isRefreshing && 'animate-spin')} />
+          <RefreshCw className="h-4 w-4" />
           <div className="absolute -right-1 -top-1 flex items-center justify-center">
-            {isRefreshing ? (
+            {isRefreshing || isFetching ? (
               <div className="flex h-3 w-3 items-center justify-center rounded-full bg-primary transition-all duration-200 ease-in-out">
                 <LoaderCircle className="h-2 w-2 animate-spin text-primary-foreground" />
               </div>
             ) : (
-              autoRefreshInterval > 0 && (
-                <div className="h-2 w-2 rounded-full bg-primary transition-all duration-200 ease-in-out" />
-              )
+              autoRefreshInterval > 0 && <div className="h-2 w-2 rounded-full bg-primary transition-all duration-200 ease-in-out" />
             )}
           </div>
         </Button>
@@ -336,12 +327,12 @@ export const Filters = ({ filters, onFilterChange, refetch, autoRefetch, advance
             <DropdownMenuSeparator />
             <DropdownMenuItem
               onSelect={() => void handleRefreshClick()}
-              disabled={isRefreshing}
-              className={cn('flex items-center gap-1.5 px-1.5 py-1 text-[11px] transition-opacity duration-200', isRefreshing && 'opacity-70')}
+              disabled={isRefreshing || isFetching}
+              className={cn('flex items-center gap-1.5 px-1.5 py-1 text-[11px] transition-opacity duration-200', (isRefreshing || isFetching) && 'opacity-70')}
             >
-              <RefreshCw className={cn('h-2.5 w-2.5 flex-shrink-0 transition-transform duration-200', isRefreshing && 'animate-spin')} />
+              <RefreshCw className="h-2.5 w-2.5 flex-shrink-0" />
               <span className="truncate">{t('autoRefresh.refreshNow')}</span>
-              {isRefreshing && <LoaderCircle className="ml-auto h-2.5 w-2.5 animate-spin text-primary" />}
+              {(isRefreshing || isFetching) && <LoaderCircle className="ml-auto h-2.5 w-2.5 animate-spin text-primary" />}
             </DropdownMenuItem>
             <DropdownMenuSeparator />
             {autoRefreshOptions.map(option => {

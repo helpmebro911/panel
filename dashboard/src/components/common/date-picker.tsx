@@ -16,6 +16,10 @@ import { useIsMobile } from '@/hooks/use-mobile'
 
 export type DatePickerMode = 'single' | 'range'
 
+export type DatePickerAlign = 'start' | 'center' | 'end'
+
+export type DatePickerSide = 'top' | 'right' | 'bottom' | 'left'
+
 export interface DatePickerProps {
   /**
    * Mode of the date picker: 'single' for single date selection, 'range' for date range selection
@@ -94,6 +98,14 @@ export interface DatePickerProps {
    * Callback for field change (for form integration)
    */
   onFieldChange?: (fieldName: string, value: any) => void
+  /**
+   * Alignment of the popover
+   */
+  align?: DatePickerAlign
+  /**
+   * Side of the popover
+   */
+  side?: DatePickerSide
 }
 
 /**
@@ -145,15 +157,15 @@ export function DatePicker({
   formatDate: customFormatDate,
   fieldName = 'date',
   onFieldChange,
+  align,
+  side,
 }: DatePickerProps) {
   const { t, i18n } = useTranslation()
   const isPersianLocale = i18n.language === 'fa'
   const isMobile = useIsMobile()
   const [internalOpen, setInternalOpen] = useState(false)
   const [internalDate, setInternalDate] = useState<Date | undefined>(date || undefined)
-  const [internalRange, setInternalRange] = useState<DateRange | undefined>(
-    range || defaultRange || (mode === 'range' ? { from: addDays(new Date(), -7), to: new Date() } : undefined),
-  )
+  const [internalRange, setInternalRange] = useState<DateRange | undefined>(range || defaultRange || (mode === 'range' ? { from: addDays(new Date(), -7), to: new Date() } : undefined))
 
   // Use controlled or internal state for open
   const isOpen = controlledOpen !== undefined ? controlledOpen : internalOpen
@@ -256,7 +268,7 @@ export function DatePicker({
     (selectedRange: DateRange | undefined) => {
       setInternalRange(selectedRange)
       onRangeChange?.(selectedRange)
-      
+
       // Close popover when both dates are selected
       if (selectedRange?.from && selectedRange?.to) {
         setIsOpen(false)
@@ -297,9 +309,7 @@ export function DatePicker({
   // Single date mode
   if (mode === 'single') {
     const displayDate = internalDate || (date ? new Date(date) : undefined)
-    const timeValue = displayDate
-      ? `${String(displayDate.getHours()).padStart(2, '0')}:${String(displayDate.getMinutes()).padStart(2, '0')}`
-      : ''
+    const timeValue = displayDate ? `${String(displayDate.getHours()).padStart(2, '0')}:${String(displayDate.getMinutes()).padStart(2, '0')}` : ''
 
     const handleClear = useCallback(
       (e: MouseEvent<HTMLButtonElement>) => {
@@ -317,12 +327,7 @@ export function DatePicker({
         {label && <label className="text-sm font-medium">{label}</label>}
         <Popover open={isOpen} onOpenChange={setIsOpen}>
           <PopoverTrigger asChild>
-            <Button
-              dir="ltr"
-              variant="outline"
-              className={cn('w-full justify-start text-left font-normal', !displayDate && 'text-muted-foreground')}
-              type="button"
-            >
+            <Button dir="ltr" variant="outline" className={cn('w-full justify-start text-left font-normal', !displayDate && 'text-muted-foreground')} type="button">
               {displayDate ? formatDate(displayDate) : <span>{placeholder || label || t('timeSelector.pickDate')}</span>}
               <div className="ml-auto flex items-center gap-1">
                 {displayDate && (
@@ -341,8 +346,8 @@ export function DatePicker({
           </PopoverTrigger>
           <PopoverContent
             className="w-auto p-0"
-            align="end"
-            side={isMobile ? 'bottom' : 'left'}
+            align={align ? align : "end"}
+            side={side ? side : isMobile ? 'bottom' : 'left'}
             onInteractOutside={() => {
               setIsOpen(false)
             }}
@@ -379,7 +384,7 @@ export function DatePicker({
             )}
             {showTime && (
               <>
-                <div dir="ltr" className="hidden lg:flex items-center gap-1 flex-wrap border-t p-2">
+                <div dir="ltr" className="hidden flex-wrap items-center gap-1 border-t p-2 lg:flex">
                   {[
                     { label: '+7d', days: 7 },
                     { label: '+1m', days: 30 },
@@ -401,7 +406,7 @@ export function DatePicker({
                         variant="ghost"
                         size="sm"
                         className="h-5 px-1.5 text-[10px] text-muted-foreground hover:text-foreground"
-                        onClick={(e) => {
+                        onClick={e => {
                           e.preventDefault()
                           e.stopPropagation()
                           handleShortcut()
@@ -417,7 +422,7 @@ export function DatePicker({
                     type="time"
                     value={timeValue}
                     onChange={handleTimeChange}
-                    className="w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:brightness-0 [&::-webkit-calendar-picker-indicator]:saturate-100 [&::-webkit-calendar-picker-indicator]:hue-rotate-0"
+                    className="w-full [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-100 [&::-webkit-calendar-picker-indicator]:brightness-0 [&::-webkit-calendar-picker-indicator]:hue-rotate-0 [&::-webkit-calendar-picker-indicator]:invert [&::-webkit-calendar-picker-indicator]:saturate-100"
                     style={{
                       colorScheme: 'dark',
                     }}
@@ -439,14 +444,7 @@ export function DatePicker({
       {label && <label className="text-sm font-medium">{label}</label>}
       <Popover open={isOpen} onOpenChange={setIsOpen}>
         <PopoverTrigger asChild>
-          <Button
-            id="date"
-            variant="outline"
-            className={cn(
-              'w-full justify-start text-left font-normal overflow-hidden',
-              !displayRange && 'text-muted-foreground',
-            )}
-          >
+          <Button id="date" variant="outline" className={cn('w-full justify-start overflow-hidden text-left font-normal', !displayRange && 'text-muted-foreground')}>
             <CalendarIcon className="mr-2 h-4 w-4 flex-shrink-0" />
             {displayRange?.from ? (
               displayRange.to ? (
@@ -469,7 +467,7 @@ export function DatePicker({
             )}
           </Button>
         </PopoverTrigger>
-        <PopoverContent className="w-auto p-0" align="start" side="bottom" sideOffset={4} collisionPadding={8}>
+        <PopoverContent className="w-auto p-0" align={align ? align : "start"} side={side ? side : "bottom"} sideOffset={4} collisionPadding={8}>
           {isPersianLocale ? (
             <PersianCalendar
               mode="range"
@@ -494,4 +492,3 @@ export function DatePicker({
     </div>
   )
 }
-

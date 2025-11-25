@@ -120,7 +120,9 @@ const RemoveAllUsersConfirmationDialog = ({ adminUsername, isOpen, onClose, onCo
         </AlertDialogHeader>
         <AlertDialogFooter>
           <AlertDialogCancel onClick={onClose}>{t('cancel')}</AlertDialogCancel>
-          <AlertDialogAction variant="destructive" onClick={onConfirm}>{t('confirm')}</AlertDialogAction>
+          <AlertDialogAction variant="destructive" onClick={onConfirm}>
+            {t('confirm')}
+          </AlertDialogAction>
         </AlertDialogFooter>
       </AlertDialogContent>
     </AlertDialog>
@@ -147,7 +149,11 @@ export default function AdminsTable({ onEdit, onDelete, onToggleStatus, onResetU
   const [adminToReset, setAdminToReset] = useState<string | null>(null)
   const [adminToRemoveAllUsers, setAdminToRemoveAllUsers] = useState<string | null>(null)
 
-  const { data: adminsResponse, isLoading, isFetching } = useGetAdmins(filters, {
+  const {
+    data: adminsResponse,
+    isLoading,
+    isFetching,
+  } = useGetAdmins(filters, {
     query: {
       staleTime: 0,
       gcTime: 0,
@@ -192,7 +198,10 @@ export default function AdminsTable({ onEdit, onDelete, onToggleStatus, onResetU
     if (!isFetching && isAutoRefreshingRef.current) {
       isAutoRefreshingRef.current = false
     }
-  }, [isFetching])
+    if (!isFetching && isChangingPage) {
+      setIsChangingPage(false)
+    }
+  }, [isFetching, isChangingPage])
 
   // When filters change (e.g., search), reset page if needed
   const handleFilterChange = (newFilters: Partial<AdminFilters>) => {
@@ -288,7 +297,6 @@ export default function AdminsTable({ onEdit, onDelete, onToggleStatus, onResetU
 
     setIsChangingPage(true)
     setCurrentPage(newPage)
-    setIsChangingPage(false)
   }
 
   const handleItemsPerPageChange = (value: number) => {
@@ -329,7 +337,7 @@ export default function AdminsTable({ onEdit, onDelete, onToggleStatus, onResetU
   })
 
   const showLoadingSpinner = isLoading && isFirstLoadRef.current
-  const isPageLoading = isChangingPage
+  const isPageLoading = isChangingPage || (isFetching && !isFirstLoadRef.current && !isAutoRefreshingRef.current)
 
   return (
     <div>

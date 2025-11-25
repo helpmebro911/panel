@@ -245,8 +245,8 @@ function UserSubUpdatePieChart({ username, adminId }: UserSubUpdatePieChartProps
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">{t('statistics.adminFilterAll')}</SelectItem>
-              {admins
-                ?.filter(admin => admin.id != null)
+              {(admins?.admins || [])
+                .filter(admin => admin.id != null)
                 .map(admin => (
                   <SelectItem key={admin.id} value={String(admin.id)}>
                     {admin.username}
@@ -318,10 +318,7 @@ function UserSubUpdatePieChart({ username, adminId }: UserSubUpdatePieChartProps
                 })}
               </span>
             </div>
-            <div 
-              className="ml-auto h-2.5 w-2.5 rounded-full border-2 border-primary/30 shadow-sm" 
-              style={{ backgroundColor: leadingSegment.color }} 
-            />
+            <div className="ml-auto h-2.5 w-2.5 rounded-full border-2 border-primary/30 shadow-sm" style={{ backgroundColor: leadingSegment.color }} />
           </div>
         </CardFooter>
       )}

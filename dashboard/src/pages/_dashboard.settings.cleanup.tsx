@@ -21,7 +21,7 @@ import { formatDateByLocale } from '@/utils/datePickerUtils'
 import useDirDetection from '@/hooks/use-dir-detection'
 import { cn } from '@/lib/utils'
 import { useClearUsageData, useDeleteExpiredUsers, useGetAdmins, useGetCurrentAdmin, useResetUsersDataUsage, type AdminDetails, type UsageTable } from '@/service/api'
-import { debounce } from 'es-toolkit'
+import { useDebouncedSearch } from '@/hooks/use-debounced-search'
 import { AlertTriangle, Check, ChevronDown, Database, Loader2, RotateCcw, Server, Trash2, UserCog, UserRound } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { useTranslation } from 'react-i18next'
@@ -44,31 +44,27 @@ export default function CleanupSettings() {
 
   // Admin search state
   const [selectedAdmin, setSelectedAdmin] = useState<AdminDetails | undefined>()
-  const [adminSearch, setAdminSearch] = useState('')
   const [offset, setOffset] = useState(0)
   const [admins, setAdmins] = useState<AdminDetails[]>([])
   const [hasMore, setHasMore] = useState(true)
   const [isLoading, setIsLoading] = useState(false)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const listRef = useRef<HTMLDivElement>(null)
+  const { debouncedSearch: adminSearch, setSearch: setAdminSearchInput } = useDebouncedSearch('', 300)
 
-  // Debounced search
-  const debouncedSearch = useCallback(
-    debounce((value: string) => {
-      setOffset(0)
-      setAdmins([])
-      setHasMore(true)
-      setAdminSearch(value)
-    }, 300),
-    [],
-  )
+  // Handle debounced search side effects
+  useEffect(() => {
+    setOffset(0)
+    setAdmins([])
+    setHasMore(true)
+  }, [adminSearch])
 
   let usernameParam: string | undefined = undefined
   if (adminSearch && adminSearch !== 'system' && adminSearch !== currentAdmin?.username) {
     usernameParam = adminSearch
   }
 
-  const { data: fetchedAdmins = [] } = useGetAdmins(
+  const { data: fetchedAdminsResponse } = useGetAdmins(
     {
       limit: PAGE_SIZE,
       offset,
@@ -82,12 +78,13 @@ export default function CleanupSettings() {
   )
 
   useEffect(() => {
-    if (fetchedAdmins) {
+    if (fetchedAdminsResponse) {
+      const fetchedAdmins = fetchedAdminsResponse.admins || []
       setAdmins(prev => (offset === 0 ? fetchedAdmins : [...prev, ...fetchedAdmins]))
       setHasMore(fetchedAdmins.length === PAGE_SIZE)
       setIsLoading(false)
     }
-  }, [fetchedAdmins, offset])
+  }, [fetchedAdminsResponse, offset])
 
   const handleScroll = useCallback(() => {
     if (!listRef.current || isLoading || !hasMore) return
@@ -293,7 +290,7 @@ export default function CleanupSettings() {
               </PopoverTrigger>
               <PopoverContent className="w-64 p-1 sm:w-72 lg:w-80" sideOffset={4} align={dir === 'rtl' ? 'end' : 'start'}>
                 <Command>
-                  <CommandInput placeholder={t('search')} onValueChange={debouncedSearch} className="mb-1 h-7 text-xs sm:h-8 sm:text-sm" />
+                  <CommandInput placeholder={t('search')} onValueChange={setAdminSearchInput} className="mb-1 h-7 text-xs sm:h-8 sm:text-sm" />
                   <CommandList ref={listRef}>
                     <CommandEmpty>
                       <div className="py-3 text-center text-xs text-muted-foreground sm:py-4 sm:text-sm">{t('noAdminsFound') || 'No admins found'}</div>
@@ -355,6 +352,8 @@ export default function CleanupSettings() {
                 minDate={new Date('1900-01-01')}
                 maxDate={new Date()}
                 formatDate={formatDate}
+                side={"bottom"}
+                align={"center"}
               />
             </div>
 
@@ -368,6 +367,8 @@ export default function CleanupSettings() {
                 minDate={new Date('1900-01-01')}
                 maxDate={new Date()}
                 formatDate={formatDate}
+                side={"bottom"}
+                align={"center"}
               />
             </div>
           </div>

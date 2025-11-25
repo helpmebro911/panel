@@ -3,7 +3,7 @@
  * Do not edit manually.
  * PasarGuardAPI
  * Unified GUI Censorship Resistant Solution
- * OpenAPI spec version: 1.7.2
+ * OpenAPI spec version: 1.8.1
  */
 import { useMutation, useQuery } from '@tanstack/react-query'
 import type {
@@ -192,13 +192,6 @@ export type XrayMuxSettingsInputXudpConcurrency = number | null
 
 export type XrayMuxSettingsInputConcurrency = number | null
 
-export interface XrayMuxSettingsInput {
-  enabled?: boolean
-  concurrency?: XrayMuxSettingsInputConcurrency
-  xudp_concurrency?: XrayMuxSettingsInputXudpConcurrency
-  xudp_proxy_udp_443?: Xudp
-}
-
 export interface XrayFragmentSettings {
   /** @pattern ^(:?tlshello|[\d-]{1,16})$ */
   packets: string
@@ -216,6 +209,13 @@ export const Xudp = {
   allow: 'allow',
   skip: 'skip',
 } as const
+
+export interface XrayMuxSettingsInput {
+  enabled?: boolean
+  concurrency?: XrayMuxSettingsInputConcurrency
+  xudp_concurrency?: XrayMuxSettingsInputXudpConcurrency
+  xudp_proxy_udp_443?: Xudp
+}
 
 export type XTLSFlows = (typeof XTLSFlows)[keyof typeof XTLSFlows]
 
@@ -759,6 +759,8 @@ export interface TransportSettingsOutput {
 
 export type TransportSettingsInputWebsocketSettings = WebSocketSettings | null
 
+export type TransportSettingsInputTcpSettings = TcpSettings | null
+
 export type TransportSettingsInputKcpSettings = KCPSettings | null
 
 export type TransportSettingsInputGrpcSettings = GRPCSettings | null
@@ -810,8 +812,6 @@ export interface TcpSettings {
   request?: TcpSettingsRequest
   response?: TcpSettingsResponse
 }
-
-export type TransportSettingsInputTcpSettings = TcpSettings | null
 
 export type SystemStatsCpuUsage = number | null
 
@@ -902,7 +902,6 @@ export interface SubscriptionOutput {
   /** @maxLength 128 */
   announce?: string
   announce_url?: string
-  host_status_filter: boolean
   rules: SubRule[]
   manual_sub_request?: SubFormatEnable
   applications?: ApplicationOutput[]
@@ -916,7 +915,6 @@ export interface SubscriptionInput {
   /** @maxLength 128 */
   announce?: string
   announce_url?: string
-  host_status_filter: boolean
   rules: SubRule[]
   manual_sub_request?: SubFormatEnable
   applications?: ApplicationInput[]
@@ -1194,6 +1192,11 @@ export interface NoiseSettings {
   xray?: NoiseSettingsXray
 }
 
+export interface NodesResponse {
+  nodes: NodeResponse[]
+  total: number
+}
+
 export type NodeUsageStatsListPeriod = Period | null
 
 export interface NodeUsageStat {
@@ -1271,6 +1274,16 @@ export interface NodeResponse {
   data_limit?: number
   data_limit_reset_strategy?: DataLimitResetStrategy
   reset_time?: number
+  /**
+   * @minimum 3
+   * @maximum 60
+   */
+  default_timeout?: number
+  /**
+   * @minimum 3
+   * @maximum 60
+   */
+  internal_timeout?: number
   id: number
   xray_version: NodeResponseXrayVersion
   node_version: NodeResponseNodeVersion
@@ -1302,6 +1315,10 @@ export interface NodeNotificationEnable {
 }
 
 export type NodeModifyStatus = NodeStatus | null
+
+export type NodeModifyInternalTimeout = number | null
+
+export type NodeModifyDefaultTimeout = number | null
 
 export type NodeModifyResetTime = number | null
 
@@ -1340,6 +1357,8 @@ export interface NodeModify {
   data_limit?: NodeModifyDataLimit
   data_limit_reset_strategy?: NodeModifyDataLimitResetStrategy
   reset_time?: NodeModifyResetTime
+  default_timeout?: NodeModifyDefaultTimeout
+  internal_timeout?: NodeModifyInternalTimeout
   status?: NodeModifyStatus
 }
 
@@ -1365,6 +1384,16 @@ export interface NodeCreate {
   data_limit?: number
   data_limit_reset_strategy?: DataLimitResetStrategy
   reset_time?: number
+  /**
+   * @minimum 3
+   * @maximum 60
+   */
+  default_timeout?: number
+  /**
+   * @minimum 3
+   * @maximum 60
+   */
+  internal_timeout?: number
 }
 
 export type NextPlanModelExpire = number | null
@@ -1884,6 +1913,16 @@ export interface ApplicationInput {
   download_links: DownloadLink[]
 }
 
+/**
+ * Response model for admins list with pagination and statistics.
+ */
+export interface AdminsResponse {
+  admins: AdminDetails[]
+  total: number
+  active: number
+  disabled: number
+}
+
 export interface AdminNotificationEnable {
   create?: boolean
   modify?: boolean
@@ -1949,13 +1988,6 @@ export type AdminDetailsTelegramId = number | null
 /**
  * Complete admin model with all fields for database representation and API responses.
  */
-export interface AdminsResponse {
-  admins: AdminDetails[]
-  total: number
-  active: number
-  disabled: number
-}
-
 export interface AdminDetails {
   username: string
   telegram_id?: AdminDetailsTelegramId
@@ -4026,7 +4058,7 @@ export function useGetUsage<TData = Awaited<ReturnType<typeof getUsage>>, TError
  * @summary Get Nodes
  */
 export const getNodes = (params?: GetNodesParams, signal?: AbortSignal) => {
-  return orvalFetcher<NodeResponse[]>({ url: `/api/nodes`, method: 'GET', params, signal })
+  return orvalFetcher<NodesResponse>({ url: `/api/nodes`, method: 'GET', params, signal })
 }
 
 export const getGetNodesQueryKey = (params?: GetNodesParams) => {

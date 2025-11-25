@@ -15,7 +15,6 @@ from app.db.crud.admin import (
 )
 from app.db.crud.bulk import activate_all_disabled_users, disable_all_active_users
 from app.db.crud.user import get_users, remove_users
-from app.db.models import Admin as DBAdmin
 from app.models.admin import AdminCreate, AdminDetails, AdminModify, AdminsResponse
 from app.node import node_manager
 from app.operation import BaseOperation, OperatorType
@@ -97,13 +96,15 @@ class AdminOperation(BaseOperation):
         admins, total, active, disabled = await get_admins(
             db, offset, limit, username, sort_list if sort_list else None, return_with_count=True
         )
-        
-        return AdminsResponse(
-            admins=[AdminDetails.model_validate(admin) for admin in admins],
-            total=total,
-            active=active,
-            disabled=disabled,
-        )
+
+        if self.operator_type in (OperatorType.API, OperatorType.WEB):
+            return AdminsResponse(
+                admins=admins,
+                total=total,
+                active=active,
+                disabled=disabled,
+            )
+        return admins  # type: ignore[return-value]
 
     async def get_admins_count(self, db: AsyncSession) -> int:
         return await get_admins_count(db)

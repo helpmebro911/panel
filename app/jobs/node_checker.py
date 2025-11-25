@@ -10,7 +10,7 @@ from app.node import node_manager
 from app.utils.logger import get_logger
 from app.operation.node import NodeOperation
 from app.operation import OperatorType
-from app.db.crud.node import get_limited_nodes
+from app.db.crud.node import get_limited_nodes, get_nodes
 
 from config import JOB_CORE_HEALTH_CHECK_INTERVAL, JOB_CHECK_NODE_LIMITS_INTERVAL
 
@@ -24,7 +24,7 @@ async def verify_node_backend_health(node: PasarGuardNode, node_name: str) -> He
     Verify node health by checking backend stats.
     Returns updated health status.
     """
-    current_health = await node.get_health()
+    current_health = await asyncio.wait_for(node.get_health(), timeout=10)
 
     # Skip nodes that are not connected or invalid
     if current_health in (Health.NOT_CONNECTED, Health.INVALID):
@@ -55,8 +55,8 @@ async def update_node_connection_status(node_id: int, node: PasarGuardNode):
     Update node connection status by getting backend stats and version info.
     """
     try:
-        await asyncio.wait_for(node.get_backend_stats(), timeout=20)
-        node_version, core_version = await asyncio.wait_for(node.get_versions(), timeout=20)
+        await node.get_backend_stats()
+        node_version, core_version = await asyncio.wait_for(node.get_versions(), timeout=10)
         async with GetDB() as db:
             await NodeOperation._update_single_node_status(
                 db,
@@ -66,7 +66,7 @@ async def update_node_connection_status(node_id: int, node: PasarGuardNode):
                 node_version=node_version,
             )
     except asyncio.TimeoutError:
-        logger.warning(f"Node {node_id} connection status check timed out, will retry on next check")
+        logger.warning(f"Node {node_id} get versions timed out, will retry on next check")
         return
     except NodeAPIError as e:
         if e.code > -3:
@@ -89,10 +89,12 @@ async def process_node_health_check(db_node: Node, node: PasarGuardNode):
         return
 
     try:
-        health = await asyncio.wait_for(verify_node_backend_health(node, db_node.name), timeout=20)
+        health = await verify_node_backend_health(node, db_node.name)
     except asyncio.TimeoutError:
         if db_node.status == NodeStatus.connected:
-            logger.warning(f"Node {db_node.id} ({db_node.name}) health check timed out but was previously connected, will retry")
+            logger.warning(
+                f"Node {db_node.id} ({db_node.name}) health check timed out but was previously connected, will retry"
+            )
             return
         async with GetDB() as db:
             await NodeOperation._update_single_node_status(
@@ -159,7 +161,7 @@ async def node_health_check():
     Cron job that checks health of all enabled nodes.
     """
     async with GetDB() as db:
-        db_nodes = await node_operator.get_db_nodes(db=db, enabled=True)
+        db_nodes, _ = await get_nodes(db=db, enabled=True)
         dict_nodes = await node_manager.get_nodes()
 
         check_tasks = [process_node_health_check(db_node, dict_nodes.get(db_node.id)) for db_node in db_nodes]
@@ -171,7 +173,7 @@ async def initialize_nodes():
     logger.info("Starting nodes' cores...")
 
     async with GetDB() as db:
-        db_nodes = await node_operator.get_db_nodes(db=db, enabled=True)
+        db_nodes, _ = await get_nodes(db=db, enabled=True)
 
         if not db_nodes:
             logger.warning("Attention: You have no node, you need to have at least one node")

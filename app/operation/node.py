@@ -29,6 +29,7 @@ from app.models.node import (
     NodeModify,
     NodeNotification,
     NodeResponse,
+    NodesResponse,
     UsageTable,
     UserIPList,
     UserIPListAll,
@@ -54,8 +55,8 @@ class NodeOperation(BaseOperation):
         status: NodeStatus | list[NodeStatus] | None = None,
         ids: list[int] | None = None,
         search: str | None = None,
-    ) -> list[Node]:
-        return await get_nodes(
+    ) -> NodesResponse:
+        db_nodes, count = await get_nodes(
             db=db,
             core_id=core_id,
             offset=offset,
@@ -65,6 +66,8 @@ class NodeOperation(BaseOperation):
             ids=ids,
             search=search,
         )
+        node_responses = [NodeResponse.model_validate(node) for node in db_nodes]
+        return NodesResponse(nodes=node_responses, total=count)
 
     @staticmethod
     async def _update_single_node_status(
@@ -237,13 +240,14 @@ class NodeOperation(BaseOperation):
 
     async def remove_node(self, db: AsyncSession, node_id: Node, admin: AdminDetails) -> None:
         db_node: Node = await self.get_validated_node(db=db, node_id=node_id)
+        node_response = NodeResponse.model_validate(db_node)
 
         await node_manager.remove_node(db_node.id)
         await remove_node(db=db, db_node=db_node)
 
-        logger.info(f'Node "{db_node.name}" with id "{db_node.id}" deleted by admin "{admin.username}"')
+        logger.info(f'Node "{node_response.name}" with id "{node_response.id}" deleted by admin "{admin.username}"')
 
-        asyncio.create_task(notification.remove_node(db_node, admin.username))
+        asyncio.create_task(notification.remove_node(node_response, admin.username))
 
     async def reset_node_usage(self, db: AsyncSession, node_id: int, admin: AdminDetails) -> NodeResponse:
         """
@@ -441,7 +445,7 @@ class NodeOperation(BaseOperation):
         logger.info(f'Node "{node_id}" restarted by admin "{admin.username}"')
 
     async def restart_all_node(self, db: AsyncSession, admin: AdminDetails, core_id: int | None = None) -> None:
-        nodes: list[Node] = await self.get_db_nodes(db, core_id, enabled=True)
+        nodes, _ = await get_nodes(db, core_id=core_id, enabled=True)
         await self.connect_nodes_bulk(db, nodes)
         logger.info(f'All nodes restarted by admin "{admin.username}"')
 
